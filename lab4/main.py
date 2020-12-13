@@ -34,18 +34,9 @@ class MnistDataset(Dataset):
         return item
 
 
-def read_data(data_path, dtype=np.float32):
-    return np.genfromtxt(data_path, delimiter=',', dtype=dtype)
-
-
-def normalize_data(data_np):
-    mean_vec = np.mean(data_np, axis=0)
-    std_vec = np.std(data_np, axis=0)
-    return mean_vec, std_vec
-
-
 def split_data(data_path, label_path, ratio=(0.8, 0.1, 0.1)):
-    data_np, label_np = read_data(data_path), read_data(label_path, dtype=np.int64)
+    data_np, label_np = np.genfromtxt(data_path, delimiter=',', dtype=np.float32), \
+                        np.genfromtxt(label_path, delimiter=',', dtype=np.int64)
     data_num = len(data_np)
 
     indices = np.arange(data_num)
@@ -91,17 +82,15 @@ def train():
             _, _predict_ids = _predict.max(1)
             _right_num += _predict_ids.eq(_batch_label).sum().item()
             _data_num += len(_batch_data)
-        print('Avg test loss = %.15f, acc = %.4f%%  [%d/%d].' % (
-            _avg_loss, _right_num / _data_num * 100, _right_num, _data_num))
-        return _right_num / _data_num * 100
+        return _right_num, _data_num, _avg_loss, _right_num / _data_num
 
-    train_x, train_y, dev_x, dev_y, test_x, test_y = split_data(TrainSamplePath, TrainLabelPath, ratio=(0.9, 0, 0.1))
+    train_x, train_y, dev_x, dev_y, test_x, test_y = split_data(TrainSamplePath, TrainLabelPath, ratio=(0.8, 0.1, 0.1))
     print('Train: ' + str(train_x.shape) + '\nVal: ' + str(dev_x.shape) + '\nTest: ' + str(test_x.shape))
-
-    mean_vec, std_vec = normalize_data(train_x)
+    mean_vec, std_vec = np.mean(train_x, axis=0), np.std(train_x, axis=0)
     train_dataset = MnistDataset((train_x - mean_vec) / std_vec, train_y)
     train_dataloader = DataLoader(train_dataset, batch_size=Batch, shuffle=True, num_workers=4)
-
+    dev_dataset = MnistDataset((dev_x - mean_vec) / std_vec, dev_y)
+    dev_dataloader = DataLoader(dev_dataset, batch_size=Batch, shuffle=False, num_workers=4)
     test_dataset = MnistDataset((test_x - mean_vec) / std_vec, test_y)
     test_dataloader = DataLoader(test_dataset, batch_size=Batch, shuffle=False, num_workers=4)
 
@@ -115,7 +104,7 @@ def train():
     for epoch in range(Epoch):
         for param_group in optimizer.param_groups:  # 动态更新学习率
             param_group['lr'] = Lr * (0.1 ** (epoch // LrDecayEpoch))
-        print('-' * 30 + '\nCurrent lr = %f' % (Lr * (0.1 ** (epoch // LrDecayEpoch))))
+        print('-' * 80 + '\nCurrent lr = %f' % (Lr * (0.1 ** (epoch // LrDecayEpoch))))
         model.train()
 
         avg_loss, right_num, data_num = 0, 0, len(train_dataset)
@@ -134,7 +123,8 @@ def train():
             epoch + 1, Epoch, avg_loss, right_num / data_num * 100, right_num, data_num))
 
         with torch.no_grad():  # 评估开发集上的模型效果，并保存最好的模型
-            dev_acc = eval_data(model, test_dataloader, loss_func)
+            right_num, data_num, avg_loss, dev_acc = eval_data(model, dev_dataloader, loss_func)
+            print('Avg Dev loss = %.15f, acc = %.4f%%  [%d/%d].' % (avg_loss, dev_acc * 100, right_num, data_num))
             if dev_acc > best_dev_acc:
                 best_dev_acc = dev_acc
                 print('Best Dev Acc: %.4f%%' % best_dev_acc)
@@ -143,10 +133,12 @@ def train():
                     'mean_vec': mean_vec, 'std_vec': std_vec
                 }
                 torch.save(save_dict, './model')
+    right_num, data_num, _, test_acc = eval_data(model, test_dataloader, loss_func)
+    print('Test data = %.4f%%  [%d/%d]' % (test_acc * 100, right_num, data_num))
 
 
 def eval_model(data_path, label_path=None):
-    dataset = MnistDataset(read_data(data_path))
+    dataset = MnistDataset(np.genfromtxt(data_path, delimiter=',', dtype=np.float32))
     dataloader = DataLoader(dataset, batch_size=Batch, shuffle=False, num_workers=4)
 
     model = get_model()
@@ -164,16 +156,15 @@ def eval_model(data_path, label_path=None):
 
     predict = np.argmax(predict, axis=1)
     if label_path:
-        label_np = read_data(label_path)
+        label_np = np.genfromtxt(label_path, delimiter=',', dtype=np.float32)
         right_num = np.sum(label_np == predict)
-        print('Test data = %.4f%%  [%d/%d]' % (right_num / len(dataset), int(right_num), len(dataset)))
+        print('Test data = %.4f%%  [%d/%d]' % (right_num / len(dataset) * 100, int(right_num), len(dataset)))
 
     with open(TestPredPath, 'w') as f:
-        for label in predict:
-            f.write(str(label) + '\n')
+        f.write('\n'.join(map(str, predict.tolist())))
 
 
 if __name__ == '__main__':
-    # train()
-    eval_model(TrainSamplePath, TrainLabelPath)
+    train()
     # eval_model(TestSamplePath)
+    # eval_model(TestSamplePath, TestLabelPath)
