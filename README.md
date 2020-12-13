@@ -1,5 +1,10 @@
 # 哈工大研究生模式识别课程
-## 实验一：K-均值聚类
-## 实验二：GMM分类器
-## 实验三：线性分类器
-## 实验四：自实现分类器考试
+## 写在前面
+- 邮箱地址：<jrzhang@ir.hit.edu.cn>
+- 因为是考查课，所以实验做得不是特别满意
+- 如有雷同，纯属正常，因为代码大量参考了师兄的火炬：[https://github.com/sonack/PatternRecognitionExps](https://github.com/sonack/PatternRecognitionExps)
+## 实验内容
+- [实验一：K-均值聚类](./lab1)
+- [实验二：GMM分类器](./lab2)
+- [实验三：线性分类器](./lab3)
+- [实验四：自实现分类器考试](./lab4)
